@@ -18,20 +18,20 @@
 
   <script>
 async function load() {
-  document.getElementById('out').innerHTML = 'Загружаю данные Народмон…';
+  document.getElementById('out').innerHTML = 'Загружаю…';
   try {
     const res = await fetch('https://narodmon.ru/client.php?json');
-    const data = await res.json();
+    const raw = await res.json();
 
-    // В 2025 году данные приходят сразу массивом объектов
-    const devices = Array.isArray(data) ? data : data.devices || [];
+    // Поддержка обоих форматов ответа
+    const devices = raw.devices || raw || [];
 
     const myLat = 55.7558;
     const myLng = 37.6173;
     const maxDist = 100; // км
 
     const nearby = devices
-      .filter(d => d.lat && d.lng)
+      .filter(d => d && d.lat && d.lng)
       .map(d => {
         const dist = Math.hypot(d.lat - myLat, d.lng - myLng) * 111.2;
         return { ...d, distance: +dist.toFixed(1) };
@@ -39,19 +39,23 @@ async function load() {
       .filter(d => d.distance <= maxDist)
       .sort((a, b) => a.distance - b.distance);
 
-    let html = `<b>Найдено ${nearby.length} датчиков в радиусе ${maxDist} км</b><br><br>`;
+    let html = `<b>Найдено ${nearby.length} датчиков в радиусе ${maxDist} км от Москвы</b><br><br>`;
     
-    nearby.slice(0, 30).forEach(d => {
-      const temp = d.sensors?.find(s => s.type === 1)?.value ?? '—';
-      const hum = d.sensors?.find(s => s.type === 2)?.value ?? '—';
-      const pressure = d.sensors?.find(s => s.type === 3)?.value ?? '—';
-      
-      html += `<b>${d.name || 'Без имени'}</b> — ${d.distance} км<br>`;
-      html += `Температура: ${temp}°C Влажность: ${hum}% Давление: ${pressure} мм.рт.ст.<br>`;
-      html += `Обновлено: ${new Date(d.time * 1000).toLocaleString('ru')}<br><br>`;
-    });
+    if (nearby.length === 0) {
+      html += 'В указанном радиусе датчиков пока нет';
+    } else {
+      nearby.slice(0, 30).forEach(d => {
+        const temp = d.sensors?.find(s => s.type === 1)?.value ?? '—';
+        const hum = d.sensors?.find(s => s.type === 2)?.value ?? '—';
+        const press = d.sensors?.find(s => s.type === 3)?.value ?? '—';
+        
+        html += `<b>${d.name || 'Без названия'}</b> — ${d.distance} км<br>`;
+        html += `Температура: ${temp}°C Влажность: ${hum}% Давление: ${press}<br>`;
+        html += `Обновлено: ${new Date((d.time || d.updated) * 1000).toLocaleTimeString('ru')}<br><br>`;
+      });
+    }
 
-    document.getElementById('out').innerHTML = html || 'Датчики не найдены';
+    document.getElementById('out').innerHTML = html;
   } catch (e) {
     document.getElementById('out').innerHTML = 'Ошибка: ' + e.message;
   }
@@ -59,7 +63,7 @@ async function load() {
 
 Telegram.WebApp.ready();
 Telegram.WebApp.MainButton.setText('Обновить').onClick(load).show();
-load(); // сразу загружаем при открытии
+load(); // автозагрузка при открытии
 </script>
 </body>
 </html>
