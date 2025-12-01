@@ -18,47 +18,73 @@
 
   <script>
 async function load() {
-  document.getElementById('out').innerHTML = 'Загружаю…';
+  document.getElementById('out').innerHTML = 'Загружаю данные Народмон…';
   try {
-    const res = await fetch('https://narodmon.ru/client.php?json');
-    const raw = await res.json();
+    let data;
+    let source = '';
 
-    // Поддержка обоих форматов ответа
-    const devices = raw.devices || raw || [];
-
-    const myLat = 55.7558;
-    const myLng = 37.6173;
-    const maxDist = 100; // км
-
-    const nearby = devices
-      .filter(d => d && d.lat && d.lng)
-      .map(d => {
-        const dist = Math.hypot(d.lat - myLat, d.lng - myLng) * 111.2;
-        return { ...d, distance: +dist.toFixed(1) };
-      })
-      .filter(d => d.distance <= maxDist)
-      .sort((a, b) => a.distance - b.distance);
-
-    let html = `<b>Найдено ${nearby.length} датчиков в радиусе ${maxDist} км от Москвы</b><br><br>`;
-    
-    if (nearby.length === 0) {
-      html += 'В указанном радиусе датчиков пока нет';
-    } else {
-      nearby.slice(0, 30).forEach(d => {
-        const temp = d.sensors?.find(s => s.type === 1)?.value ?? '—';
-        const hum = d.sensors?.find(s => s.type === 2)?.value ?? '—';
-        const press = d.sensors?.find(s => s.type === 3)?.value ?? '—';
-        
-        html += `<b>${d.name || 'Без названия'}</b> — ${d.distance} км<br>`;
-        html += `Температура: ${temp}°C Влажность: ${hum}% Давление: ${press}<br>`;
-        html += `Обновлено: ${new Date((d.time || d.updated) * 1000).toLocaleTimeString('ru')}<br><br>`;
-      });
+    // Пробуем основной API
+    let res = await fetch('https://narodmon.ru/client.php?json');
+    let raw = await res.json();
+    if (raw.error) {
+      throw new Error('Основной API недоступен, пробуем альтернативу');
     }
+    data = raw;
+    source = 'narodmon.ru';
+    console.log('Данные с ' + source);
 
-    document.getElementById('out').innerHTML = html;
+    // Если основной не сработал, fallback на альтернативу
   } catch (e) {
-    document.getElementById('out').innerHTML = 'Ошибка: ' + e.message;
+    console.log('Fallback на ps.narodmon.ru');
+    res = await fetch('https://ps.narodmon.ru/data.json');
+    data = await res.json();
+    source = 'ps.narodmon.ru';
   }
+
+  // Обработка данных (поддержка обоих форматов)
+  const devices = Array.isArray(data) ? data : (data.devices || []);
+
+  if (!Array.isArray(devices) || devices.length === 0) {
+    throw new Error('Нет данных от API');
+  }
+
+  const myLat = 55.7558;
+  const myLng = 37.6173;
+  const maxDist = 100; // км
+
+  const nearby = devices
+    .filter(d => d && typeof d === 'object' && d.lat && d.lng)
+    .map(d => {
+      const dist = Math.hypot(d.lat - myLat, d.lng - myLng) * 111.2;
+      return { ...d, distance: +dist.toFixed(1) };
+    })
+    .filter(d => d.distance <= maxDist)
+    .sort((a, b) => a.distance - b.distance);
+
+  let html = `<b>Данные с ${source} | Найдено ${nearby.length} датчиков в радиусе ${maxDist} км от Москвы</b><br><br>`;
+  
+  if (nearby.length === 0) {
+    html += 'В радиусе пока нет активных датчиков. Расширьте радиус или попробуйте позже.';
+  } else {
+    nearby.slice(0, 25).forEach(d => {
+      const tempSensor = d.sensors?.find(s => s.type === 1) || d.sensors?.find(s => s.type_name === 'Температура') || {};
+      const humSensor = d.sensors?.find(s => s.type === 2) || d.sensors?.find(s => s.type_name === 'Влажность') || {};
+      const pressSensor = d.sensors?.find(s => s.type === 3) || d.sensors?.find(s => s.type_name === 'Давление') || {};
+      
+      const temp = tempSensor.value ?? '—';
+      const hum = humSensor.value ?? '—';
+      const press = pressSensor.value ?? '—';
+      
+      html += `<b>${d.name || d.title || 'Без названия'}</b> — ${d.distance} км<br>`;
+      html += `🌡️ ${temp}°C 💧 ${hum}% 📊 ${press} мм.рт.ст.<br>`;
+      const updateTime = d.time || d.updated || d.last_update;
+      html += `Обновлено: ${new Date(updateTime * 1000).toLocaleString('ru-RU')}<br><br>`;
+    });
+  }
+
+  document.getElementById('out').innerHTML = html;
+} catch (e) {
+  document.getElementById('out').innerHTML = `<b>Ошибка:</b> ${e.message}<br>Проверьте интернет или попробуйте позже.`;
 }
 
 Telegram.WebApp.ready();
