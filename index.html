@@ -17,18 +17,41 @@
   <pre id="out">Нажми кнопку ↑</pre>
 
   <script>
-    async function load() {
-      document.getElementById('out').textContent = 'Загружаю…';
-      try {
-       const res = await fetch('https://narodmon.ru/client.php?json');
-        const text = await res.text();
-        document.getElementById('out').textContent = text;
-      } catch(e) {
-        document.getElementById('out').textContent = 'Ошибка: ' + e.message;
-      }
-    }
-    Telegram.WebApp.ready();
-    Telegram.WebApp.MainButton.setText('Обновить').onClick(load).show();
-  </script>
+async function load() {
+  document.getElementById('out').innerHTML = 'Загружаю…';
+  try {
+    const res = await fetch('https://narodmon.ru/client.php?json');
+    const data = await res.json();
+
+    const myLat = 55.7558, myLng = 37.6173;
+    const maxDist = 100; // км
+
+    const nearby = data.devices
+      .filter(d => d.lat && d.lng)
+      .map(d => {
+        const dist = Math.hypot(d.lat - myLat, d.lng - myLng) * 111.2;
+        return { ...d, distance: +dist.toFixed(1) };
+      })
+      .filter(d => d.distance <= maxDist)
+      .sort((a, b) => a.distance - b.distance);
+
+    let html = `<b>Найдено ${nearby.length} датчиков в радиусе ${maxDist} км от Москвы</b><br><br>`;
+    nearby.slice(0, 25).forEach(d => {
+      const temp = d.sensors?.find(s => s.type === 1)?.value ?? '—';
+      const hum = d.sensors?.find(s => s.type === 2)?.value ?? '—';
+      html += `<b>${d.name || 'Без имени'}</b> — ${d.distance} км<br>`;
+      html += `🌡️ ${temp}°C 💧 ${hum}% ⌚ ${new Date(d.time * 1000).toLocaleTimeString('ru')}<br><br>`;
+    });
+
+    document.getElementById('out').innerHTML = html;
+  } catch (e) {
+    document.getElementById('out').textContent = 'Ошибка: ' + e.message;
+  }
+}
+
+Telegram.WebApp.ready();
+Telegram.WebApp.MainButton.setText('Обновить').onClick(load).show();
+load(); // загружаем сразу при открытии
+</script>
 </body>
 </html>
