@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Narodmon Mini App</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body {font-family: sans-serif; padding:20px; background:#000; color:#fff; margin:0;}
+    button {padding:14px 24px; font-size:16px; border-radius:12px; border:none; background:#0088cc; color:white;}
+    pre {background:#111; padding:15px; border-radius:8px; overflow:auto; max-height:70vh;}
+  </style>
+</head>
+<body>
+  <h1>Датчики рядом (Москва)</h1>
+  <button onclick="load()">Загрузить</button>
+  <pre id="out">Нажми кнопку ↑</pre>
+
+  <script>
+    async function load() {
+      document.getElementById('out').textContent = 'Загружаю…';
+      try {
+        const res = await fetch('/api/narodmon?sensorsNearby&lat=55.7558&lng=37.6173&distance=100');
+        const text = await res.text();
+        document.getElementById('out').textContent = text;
+      } catch(e) {
+        document.getElementById('out').textContent = 'Ошибка: ' + e.message;
+      }
+    }
+    Telegram.WebApp.ready();
+    Telegram.WebApp.MainButton.setText('Обновить').onClick(load).show();
+  </script>
+</body>
+</html>

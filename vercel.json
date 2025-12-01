@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/narodmon", "destination": "/api/narodmon.js" }
+  ]
+}
