@@ -20,7 +20,7 @@
     async function load() {
       document.getElementById('out').textContent = 'Загружаю…';
       try {
-       const res = await fetch('https://thingproxy.freeboard.io/fetch/https://narodmon.ru/api/?sensorsNearby&lat=55.7558&lng=37.6173&distance=100');
+       const res = await fetch('https://corsproxy.io/?' + encodeURIComponent('https://narodmon.ru/api/?sensorsNearby&lat=55.7558&lng=37.6173&distance=100'));
         const text = await res.text();
         document.getElementById('out').textContent = text;
       } catch(e) {
