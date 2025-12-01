@@ -85,7 +85,8 @@ async function getLocation() {
 async function loadSensors(lat, lng, title) {
   document.getElementById('out').innerHTML = 'Загружаю датчики…';
   
-  const url = `https://narodmon.ru/api/sensorsNearby?lat=${lat}&lng=${lng}&distance=50&types=1,2,3&api_key=${API_KEY}`;
+  const uuid = Telegram.WebApp.initDataUnsafe.user?.id || 'user_' + Date.now();
+const url = `https://narodmon.ru/api/sensorsNearby?lat=${lat}&lng=${lng}&distance=50&types=1,2,3&api_key=${API_KEY}&uuid=${uuid}`;
   
   try {
     const res = await fetch('https://corsproxy.io/?' + encodeURIComponent(url));
