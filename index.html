@@ -1,116 +1,126 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Narodmon Mini App</title>
+  <title>Погода Народмон</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     body {font-family: sans-serif; padding:20px; background:#000; color:#fff; margin:0;}
-    button {padding:14px 24px; font-size:16px; border-radius:12px; border:none; background:#0088cc; color:white;}
-    pre {background:#111; padding:15px; border-radius:8px; overflow:auto; max-height:70vh;}
+    input, button, select {padding:12px 16px; margin:8px 0; border-radius:12px; font-size:16px; width:100%; box-sizing:border-box;}
+    input, select {background:#111; border:1px solid #333; color:#fff;}
+    button {background:#0088cc; border:none; color:white;}
+    .card {background:#111; padding:15px; border-radius:12px; margin:10px 0;}
+    .small {font-size:0.9em; color:#aaa;}
   </style>
 </head>
 <body>
-  <h1>Датчики рядом (Москва)</h1>
-  <button onclick="load()">Загрузить</button>
-  <pre id="out">Нажми кнопку ↑</pre>
-
-  <script>
-async function load() {
-  document.getElementById('out').innerHTML = 'Загружаю примеры датчиков Москвы…';
-
-  // Фейковые реалистичные данные (на основе реальных станций Народмона в декабре 2025)
-  const exampleDevices = [
-    {
-      name: "Парк Горького",
-      lat: 55.734, lng: 37.609, distance: 2.1,
-      sensors: [
-        { type: 1, value: -1.2 }, // температура
-        { type: 2, value: 82 },   // влажность
-        { type: 3, value: 748 }   // давление
-      ],
-      time: Date.now() / 1000
-    },
-    {
-      name: "ВДНХ",
-      lat: 55.823, lng: 37.620, distance: 8.5,
-      sensors: [
-        { type: 1, value: -2.8 },
-        { type: 2, value: 88 },
-        { type: 3, value: 752 }
-      ],
-      time: Date.now() / 1000
-    },
-    {
-      name: "Красная площадь",
-      lat: 55.753, lng: 37.623, distance: 0.3,
-      sensors: [
-        { type: 1, value: -0.5 },
-        { type: 2, value: 79 },
-        { type: 3, value: 749 }
-      ],
-      time: Date.now() / 1000
-    },
-    {
-      name: "Парк Коломенское",
-      lat: 55.674, lng: 37.686, distance: 9.2,
-      sensors: [
-        { type: 1, value: -3.1 },
-        { type: 2, value: 91 },
-        { type: 3, value: 747 }
-      ],
-      time: Date.now() / 1000
-    },
-    {
-      name: "Останкино",
-      lat: 55.819, lng: 37.611, distance: 7.9,
-      sensors: [
-        { type: 1, value: -1.8 },
-        { type: 2, value: 85 },
-        { type: 3, value: 750 }
-      ],
-      time: Date.now() / 1000
-    }
-    // Можно добавить больше, если нужно
-  ];
-
-  // Имитация задержки загрузки
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  const nearby = exampleDevices.sort((a, b) => a.distance - b.distance);
-
-  let html = `<b>Примеры датчиков в радиусе 10 км от Москвы (5 станций)</b><br><br>`;
+  <h1>Погода по датчикам Народмон</h1>
   
-  nearby.forEach(d => {
-    const temp = d.sensors.find(s => s.type === 1)?.value ?? '—';
-    const hum = d.sensors.find(s => s.type === 2)?.value ?? '—';
-    const press = d.sensors.find(s => s.type === 3)?.value ?? '—';
-    
-    html += `<b>${d.name}</b> — ${d.distance} км<br>`;
-    html += `🌡️ ${temp}°C 💧 ${hum}% 📊 ${press} мм.рт.ст.<br>`;
-    html += `Обновлено: ${new Date(d.time * 1000).toLocaleTimeString('ru-RU')}<br><br>`;
-  });
+  <input type="text" id="city" placeholder="Введите город или нажмите ↓" list="cities">
+  <datalist id="cities">
+    <option>Москва</option><option>Санкт-Петербург</option><option>Новосибирск</option><option>Екатеринбург</option>
+    <option>Казань</option><option>Нижний Новгород</option><option>Челябинск</option><option>Красноярск</option>
+    <option>Самара</option><option>Уфа</option><option>Ростов-на-Дону</option><option>Омск</option>
+    <option>Краснодар</option><option>Воронеж</option><option>Пермь</option><option>Волгоград</option>
+    <option>Саратов</option><option>Тюмень</option><option>Тольятти</option><option>Ижевск</option>
+    <option>Барнаул</option><option>Ульяновск</option><option>Иркутск</option><option>Хабаровск</option>
+    <option>Ярославль</option><option>Махачкала</option><option>Владивосток</option><option>Оренбург</option>
+    <option>Томск</option><option>Кемерово</option>
+  </datalist>
+  
+  <button onclick="search()">Показать датчики</button>
+  <button onclick="getLocation()">Найти рядом со мной</button>
+  
+  <div id="out">Выберите город и нажмите кнопку</div>
 
-  document.getElementById('out').innerHTML = html;
+<script>
+const API_KEY = "WV7RVH19UkqsZ";
+const cities = {
+  "Москва": [55.7558, 37.6173],
+  "Санкт-Петербург": [59.939, 30.314],
+  "Новосибирск": [55.008, 82.935],
+  "Екатеринбург": [56.838, 60.597],
+  "Казань": [55.796, 49.106],
+  "Нижний Новгород": [56.296, 43.936],
+  "Челябинск": [55.164, 61.436],
+  "Красноярск": [56.015, 92.893],
+  "Самара": [53.241, 50.221],
+  "Уфа": [54.735, 55.958],
+  "Ростов-на-Дону": [47.222, 39.720],
+  "Омск": [54.989, 73.368],
+  "Краснодар": [45.039, 38.987],
+  "Воронеж": [51.672, 39.184],
+  "Пермь": [58.010, 56.229],
+  "Волгоград": [48.708, 44.513]
+  // при желании можно добавить ещё
+};
+
+async function search() {
+  const city = document.getElementById('city').value.trim();
+  let lat, lng;
+  
+  if (cities[city]) {
+    [lat, lng] = cities[city];
+  } else {
+    alert('Город не найден в списке. Введите точное название из списка или используйте геолокацию.');
+    return;
+  }
+  
+  localStorage.setItem('lastCity', city);
+  await loadSensors(lat, lng, city);
+}
+
+async function getLocation() {
+  document.getElementById('out').innerHTML = 'Определяю ваше местоположение…';
+  Telegram.WebApp.requestLocation();
+  
+  Telegram.WebApp.once('location', async (loc) => {
+    const lat = loc.latitude;
+    const lng = loc.longitude;
+    await loadSensors(lat, lng, 'Ваше местоположение');
+  });
+}
+
+async function loadSensors(lat, lng, title) {
+  document.getElementById('out').innerHTML = 'Загружаю датчики…';
+  
+  const url = `https://narodmon.ru/api/sensorsNearby?lat=${lat}&lng=${lng}&distance=50&types=1,2,3&api_key=${API_KEY}`;
+  
+  try {
+    const res = await fetch('https://corsproxy.io/?' + encodeURIComponent(url));
+    const data = await res.json();
+    
+    if (data.error) throw new Error(data.error);
+    
+    let html = `<b>${title}</b><br>Найдено ${data.sensors?.length || 0} датчиков в радиусе 50 км<br><br>`;
+    
+    (data.sensors || []).slice(0, 30).forEach(s => {
+      const temp = s.value !== undefined ? s.value.toFixed(1) : '—';
+      const name = s.name || s.title || 'Без названия';
+      const dist = s.distance ? s.distance.toFixed(1) + ' км' : '';
+      const time = new Date(s.time * 1000).toLocaleString('ru');
+      
+      html += `<div class="card"><b>${name}</b> ${dist}<br>`;
+      html += `Температура: ${temp}°C<br><span class="small">Обновлено: ${time}</span></div>`;
+    });
+    
+    document.getElementById('out').innerHTML = html || 'Датчики не найдены';
+  } catch (e) {
+    document.getElementById('out').innerHTML = 'Ошибка: ' + e.message;
+  }
+}
+
+// При открытии — подставляем последний город
+const last = localStorage.getItem('lastCity');
+if (last && cities[last]) {
+  document.getElementById('city').value = last;
+  const [lat, lng] = cities[last];
+  loadSensors(lat, lng, last);
 }
 
 Telegram.WebApp.ready();
-Telegram.WebApp.MainButton.setText('Обновить').onClick(load).show();
-
-// Добавляем обработчик для обычной кнопки (на всякий случай)
-document.addEventListener('DOMContentLoaded', () => {
-  const btn = document.querySelector('button[onclick="load()"]');
-  if (btn) {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      load();
-    });
-  }
-});
-
-// Автозагрузка при открытии
-load();
+Telegram.WebApp.MainButton.setText('Поиск').onClick(search).show();
 </script>
 </body>
 </html>
