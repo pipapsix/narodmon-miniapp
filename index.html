@@ -18,15 +18,19 @@
 
   <script>
 async function load() {
-  document.getElementById('out').innerHTML = 'Загружаю…';
+  document.getElementById('out').innerHTML = 'Загружаю данные Народмон…';
   try {
     const res = await fetch('https://narodmon.ru/client.php?json');
     const data = await res.json();
 
-    const myLat = 55.7558, myLng = 37.6173;
+    // В 2025 году данные приходят сразу массивом объектов
+    const devices = Array.isArray(data) ? data : data.devices || [];
+
+    const myLat = 55.7558;
+    const myLng = 37.6173;
     const maxDist = 100; // км
 
-    const nearby = data.devices
+    const nearby = devices
       .filter(d => d.lat && d.lng)
       .map(d => {
         const dist = Math.hypot(d.lat - myLat, d.lng - myLng) * 111.2;
@@ -35,23 +39,27 @@ async function load() {
       .filter(d => d.distance <= maxDist)
       .sort((a, b) => a.distance - b.distance);
 
-    let html = `<b>Найдено ${nearby.length} датчиков в радиусе ${maxDist} км от Москвы</b><br><br>`;
-    nearby.slice(0, 25).forEach(d => {
+    let html = `<b>Найдено ${nearby.length} датчиков в радиусе ${maxDist} км</b><br><br>`;
+    
+    nearby.slice(0, 30).forEach(d => {
       const temp = d.sensors?.find(s => s.type === 1)?.value ?? '—';
       const hum = d.sensors?.find(s => s.type === 2)?.value ?? '—';
+      const pressure = d.sensors?.find(s => s.type === 3)?.value ?? '—';
+      
       html += `<b>${d.name || 'Без имени'}</b> — ${d.distance} км<br>`;
-      html += `🌡️ ${temp}°C 💧 ${hum}% ⌚ ${new Date(d.time * 1000).toLocaleTimeString('ru')}<br><br>`;
+      html += `Температура: ${temp}°C Влажность: ${hum}% Давление: ${pressure} мм.рт.ст.<br>`;
+      html += `Обновлено: ${new Date(d.time * 1000).toLocaleString('ru')}<br><br>`;
     });
 
-    document.getElementById('out').innerHTML = html;
+    document.getElementById('out').innerHTML = html || 'Датчики не найдены';
   } catch (e) {
-    document.getElementById('out').textContent = 'Ошибка: ' + e.message;
+    document.getElementById('out').innerHTML = 'Ошибка: ' + e.message;
   }
 }
 
 Telegram.WebApp.ready();
 Telegram.WebApp.MainButton.setText('Обновить').onClick(load).show();
-load(); // загружаем сразу при открытии
+load(); // сразу загружаем при открытии
 </script>
 </body>
 </html>
