@@ -31,6 +31,8 @@
   <div id="out">Выберите город и нажмите кнопку</div>
 
 <script>
+const API_KEY = "WV7RVH19UkqsZ";
+
 const cities = {
   "Москва": [55.7558, 37.6173],
   "Санкт-Петербург": [59.939, 30.314],
@@ -49,6 +51,14 @@ const cities = {
   "Пермь": [58.010, 56.229],
   "Волгоград": [48.708, 44.513]
 };
+
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 
 async function search() {
   const city = document.getElementById('city').value.trim();
@@ -70,49 +80,43 @@ Telegram.WebApp.onEvent('locationReceived', loc => {
 async function loadSensors(lat, lng, title) {
   document.getElementById('out').innerHTML = 'Загружаю…';
 
+  const uuid = generateUUID();
+  const url = `https://narodmon.ru/api/sensorsNearby?lat=${lat}&lng=${lng}&distance=100&types=1,2,3&api_key=${API_KEY}&uuid=${uuid}`;
+
   try {
-    const res = await fetch('https://narodmon.ru/client.php?json');
-    const data = await res.json();
+    // Надёжный прокси + заголовки для маскировки
+    const proxyRes = await fetch('https://thingproxy.freeboard.io/fetch/' + encodeURIComponent(url), {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://narodmon.ru/',
+        'Origin': 'https://narodmon.ru'
+      }
+    });
+    const data = await proxyRes.json();
 
-    // Обработка формата ответа (массив или объект)
-    const devices = Array.isArray(data) ? data : (data.devices || []);
+    if (data.error) throw new Error(data.error);
 
-    if (!devices || devices.length === 0) {
-      throw new Error('Нет данных от сервера');
-    }
+    const sensors = data.sensors || [];
+    let html = `<b>${title}</b><br>Найдено ${sensors.length} датчиков в радиусе 100 км<br><br>`;
 
-    // Фильтр по расстоянию (100 км)
-    const maxDist = 100;
-    const nearby = devices
-      .filter(d => d.lat && d.lng && d.sensors)
-      .map(d => {
-        const distKm = Math.hypot(d.lat - lat, d.lng - lng) * 111; // грубый расчёт в км
-        return { ...d, distance: distKm };
-      })
-      .filter(d => d.distance <= maxDist)
-      .sort((a, b) => a.distance - b.distance);
-
-    let html = `<b>${title}</b><br>Найдено ${nearby.length} датчиков в радиусе ${maxDist} км<br><br>`;
-
-    if (nearby.length === 0) {
-      html += 'В этом районе пока нет активных датчиков. Попробуйте другой город или геолокацию.';
+    if (sensors.length === 0) {
+      html += 'В этом районе пока нет активных датчиков';
     } else {
-      nearby.slice(0, 30).forEach(d => {
-        const tempSensor = d.sensors.find(s => s.type === 1) || d.sensors.find(s => s.type_name === 'Температура');
-        const temp = tempSensor ? tempSensor.value.toFixed(1) + '°C' : '—';
-        const name = d.name || d.title || 'Без названия';
-        const dist = d.distance.toFixed(1) + ' км';
-        const time = new Date((d.time || d.updated || 0) * 1000).toLocaleString('ru');
+      sensors.slice(0, 30).forEach(s => {
+        const temp = s.value != null ? s.value.toFixed(1) : '—';
+        const name = s.name || 'Без названия';
+        const dist = s.distance ? s.distance.toFixed(1) + ' км' : '';
+        const time = new Date(s.time * 1000).toLocaleString('ru');
 
-        html += `<div class="card"><b>${name}</b> — ${dist}<br>`;
-        html += `Температура: ${temp}<br>`;
+        html += `<div class="card"><b>${name}</b> ${dist}<br>`;
+        html += `Температура: ${temp}°C<br>`;
         html += `<span class="small">Обновлено: ${time}</span></div>`;
       });
     }
 
     document.getElementById('out').innerHTML = html;
   } catch (e) {
-    document.getElementById('out').innerHTML = `<b>Ошибка:</b> ${e.message}<br>Проверьте интернет или попробуйте позже`;
+    document.getElementById('out').innerHTML = `<b>Ошибка:</b> ${e.message}<br>Попробуйте позже или другой город`;
   }
 }
 
