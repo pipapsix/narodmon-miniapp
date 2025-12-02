@@ -84,39 +84,34 @@ async function loadSensors(lat, lng, title) {
   const url = `https://narodmon.ru/api/sensorsNearby?lat=${lat}&lng=${lng}&distance=100&types=1,2,3&api_key=${API_KEY}&uuid=${uuid}`;
 
   try {
-    // Надёжный прокси + заголовки для маскировки
-    const proxyRes = await fetch('https://thingproxy.freeboard.io/fetch/' + encodeURIComponent(url), {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://narodmon.ru/',
-        'Origin': 'https://narodmon.ru'
-      }
-    });
-    const data = await proxyRes.json();
+    const res = await fetch(url);
+    const data = await res.json();
 
     if (data.error) throw new Error(data.error);
 
-    const sensors = data.sensors || [];
-    let html = `<b>${title}</b><br>Найдено ${sensors.length} датчиков в радиусе 100 км<br><br>`;
+    // Реальный API возвращает devices с sensors
+    const devices = data.devices || [];
+    let html = `<b>${title}</b><br>Найдено ${devices.length} датчиков в радиусе 100 км<br><br>`;
 
-    if (sensors.length === 0) {
+    if (devices.length === 0) {
       html += 'В этом районе пока нет активных датчиков';
     } else {
-      sensors.slice(0, 30).forEach(s => {
-        const temp = s.value != null ? s.value.toFixed(1) : '—';
-        const name = s.name || 'Без названия';
-        const dist = s.distance ? s.distance.toFixed(1) + ' км' : '';
-        const time = new Date(s.time * 1000).toLocaleString('ru');
+      devices.slice(0, 30).forEach(d => {
+        const tempSensor = d.sensors?.find(s => s.type === 1) || d.sensors?.find(s => s.type_name === 'Температура');
+        const temp = tempSensor ? tempSensor.value.toFixed(1) + '°C' : '—';
+        const name = d.name || d.title || 'Без названия';
+        const dist = d.distance ? d.distance.toFixed(1) + ' км' : '';
+        const time = new Date((d.time || d.updated || 0) * 1000).toLocaleString('ru');
 
         html += `<div class="card"><b>${name}</b> ${dist}<br>`;
-        html += `Температура: ${temp}°C<br>`;
+        html += `Температура: ${temp}<br>`;
         html += `<span class="small">Обновлено: ${time}</span></div>`;
       });
     }
 
     document.getElementById('out').innerHTML = html;
   } catch (e) {
-    document.getElementById('out').innerHTML = `<b>Ошибка:</b> ${e.message}<br>Попробуйте позже или другой город`;
+    document.getElementById('out').innerHTML = `<b>Ошибка:</b> ${e.message}<br>Проверьте интернет или попробуйте позже`;
   }
 }
 
