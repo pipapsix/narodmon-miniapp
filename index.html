@@ -9,23 +9,67 @@
     body {font-family: sans-serif; padding:20px; background:#000; color:#fff; margin:0;}
     input, button {padding:12px 16px; margin:8px 0; border-radius:12px; font-size:16px; width:100%; box-sizing:border-box;}
     input {background:#111; border:1px solid #333; color:#fff;}
-    button {background:#0088cc; border:none; color:white; margin-top:15px;}
+    button {background:#0088cc; border:none; color:white;}
     .card {background:#111; padding:15px; border-radius:12px; margin:10px 0;}
     .small {font-size:0.9em; color:#aaa;}
     .loader {text-align:center; padding:30px; color:#aaa;}
+    .range-wrapper {margin:20px 0; padding:15px; background:#111; border-radius:12px;}
+    .range-label {display:flex; justify-content:space-between; margin-bottom:8px; font-size:0.95em;}
+    input[type=range] {width:100%; height:38px; -webkit-appearance:none; background:#333; border-radius:12px; outline:none;}
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance:none; height:28px; width:28px; border-radius:50%; background:#0088cc; cursor:pointer;
+    }
+    .current-radius {font-size:1.3em; font-weight:bold; color:#00ccff; text-align:center; margin-top:8px;}
   </style>
 </head>
 <body>
   <h1>Погода по датчикам Народмон</h1>
 
   <input type="text" id="city" placeholder="Любой город или посёлок" autofocus>
+
+  <div class="range-wrapper">
+    <div class="range-label">
+      <span>Радиус поиска</span>
+      <span id="radiusValue">50</span> км
+    </div>
+    <input type="range" id="radius" min="5" max="200" value="50" step="5">
+    <div class="current-radius"><span id="bigRadius">50</span> км</div>
+  </div>
+
   <button onclick="search()">Показать датчики</button>
   <button onclick="getLocation()">Найти рядом со мной</button>
 
-  <div id="out">Введите город и нажмите кнопку</div>
+  <div id="out">Введите город и выберите радиус</div>
 
 <script>
 const API_KEY = "WV7RVH19UkqsZ";
+
+// Синхронизация ползунка и отображения
+const radiusSlider = document.getElementById('radius');
+const radiusValue = document.getElementById('radiusValue');
+const bigRadius = document.getElementById('bigRadius');
+
+radiusSlider.addEventListener('input', () => {
+  const val = radiusSlider.value;
+  radiusValue.textContent = val;
+  bigRadius.textContent = val;
+});
+
+// Сохраняем выбранный радиус
+function getCurrentRadius() {
+  return parseInt(radiusSlider.value);
+}
+function saveRadius() {
+  localStorage.setItem('lastRadius', getCurrentRadius());
+}
+
+// Загрузка сохранённого радиуса
+const savedRadius = localStorage.getItem('lastRadius');
+if (savedRadius) {
+  radiusSlider.value = savedRadius;
+  radiusValue.textContent = savedRadius;
+  bigRadius.textContent = savedRadius;
+}
 
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -35,30 +79,26 @@ function generateUUID() {
   });
 }
 
-// Надёжный геокодер OpenStreetMap Nominatim (работает в 2025 году)
 async function geocode(cityName) {
   const query = encodeURIComponent(cityName + ", Россия");
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1&countrycodes=ru&addressdetails=1`;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1&countrycodes=ru`;
 
   const response = await fetch(url, {
     headers: {
-      'User-Agent': 'NarodmonWeatherBot/1.0 (+https://t.me/pogoda_narodmon_bot)', // Обязательно!
-      'Referer': 'https://t.me/pogoda_narodmon_bot'
+      'User-Agent': 'NarodmonWeatherBot/1.0 (+https://t.me/pogoda_narodmon_bot)',
     }
   });
 
-  // Небольшая задержка — требование Nominatim при интенсивном использовании
-  await new Promise(r => setTimeout(r, 1100));
+  await new Promise(r => setTimeout(r, 1100)); // политика Nominatim
 
   if (!response.ok) throw new Error("Ошибка геокодера");
-
   const data = await response.json();
   if (data.length === 0) throw new Error(`Город «${cityName}» не найден`);
 
   return {
     lat: parseFloat(data[0].lat),
     lng: parseFloat(data[0].lon),
-    display_name: data[0].display_name.split(',')[0] || cityName
+    name: data[0].display_name.split(',')[0].trim() || cityName
   };
 }
 
@@ -66,12 +106,13 @@ async function search() {
   const cityInput = document.getElementById('city').value.trim();
   if (!cityInput) return alert('Введите название города');
 
-  document.getElementById('out').innerHTML = '<div class="loader">Ищем координаты города…</div>';
+  document.getElementById('out').innerHTML = '<div class="loader">Ищем город…</div>';
 
   try {
     const result = await geocode(cityInput);
     localStorage.setItem('lastCity', cityInput);
-    loadSensors(result.lat, result.lng, result.display_name || cityInput);
+    saveRadius();
+    loadSensors(result.lat, result.lng, result.name || cityInput);
   } catch (e) {
     document.getElementById('out').innerHTML = `<b>Ошибка:</b> ${e.message}`;
   }
@@ -83,14 +124,16 @@ function getLocation() {
 }
 
 Telegram.WebApp.onEvent('locationReceived', loc => {
+  saveRadius();
   loadSensors(loc.latitude, loc.longitude, 'Ваше местоположение');
 });
 
 async function loadSensors(lat, lng, title) {
-  document.getElementById('out').innerHTML = '<div class="loader">Загружаем датчики Народмон…</div>';
+  const radius = getCurrentRadius();
+  document.getElementById('out').innerHTML = `<div class="loader">Ищем датчики в радиусе ${radius} км…</div>`;
 
   const uuid = generateUUID();
-  const url = `https://narodmon.ru/api/sensorsNearby?lat=${lat}&lng=${lng}&distance=100&types=1,2,3&api_key=${API_KEY}&uuid=${uuid}&lang=ru`;
+  const url = `https://narodmon.ru/api/sensorsNearby?lat=${lat}&lng=${lng}&distance=${radius}&types=1,2,3&api_key=${API_KEY}&uuid=${uuid}&lang=ru`;
 
   try {
     const res = await fetch(url);
@@ -98,15 +141,15 @@ async function loadSensors(lat, lng, title) {
     if (data.error) throw new Error(data.error);
 
     const devices = data.devices || [];
-    let html = `<b>${title}</b><br>Найдено датчиков: ${devices.length} (радиус 100 км)<br><br>`;
+    let html = `<b>${title}</b><br>Радиус: ${radius} км ➜ Найдено датчиков: ${devices.length}<br><br>`;
 
     if (devices.length === 0) {
-      html += 'В этом районе пока нет активных датчиков';
+      html += 'В этом радиусе пока нет активных датчиков';
     } else {
-      devices.slice(0, 40).forEach(d => {
+      devices.slice(0, 50).forEach(d => {
         const temp = d.sensors?.find(s => s.type === 1)?.value;
         const temperature = temp !== undefined ? temp.toFixed(1) + '°C' : '—';
-        const name = d.name || 'Без названия';
+        const name = d.name?.trim() || 'Без названия';
         const dist = d.distance ? d.distance.toFixed(1) + ' км' : '';
         const time = new Date(d.time * 1000).toLocaleString('ru');
 
@@ -119,13 +162,13 @@ async function loadSensors(lat, lng, title) {
     }
     document.getElementById('out').innerHTML = html;
   } catch (e) {
-    document.getElementById('out').innerHTML = `<b>Ошибка Народмон:</b> ${e.message}`;
+    document.getElementById('out').innerHTML = `<b>Ошибка:</b> ${e.message}`;
   }
 }
 
 // Восстановление последнего города
-const last = localStorage.getItem('lastCity');
-if (last) document.getElementById('city').value = last;
+const lastCity = localStorage.getItem('lastCity');
+if (lastCity) document.getElementById('city').value = lastCity;
 
 Telegram.WebApp.ready();
 Telegram.WebApp.MainButton.setText('Поиск').onClick(search).show();
