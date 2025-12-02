@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Погода Народмон</title>
+  <title>Погода Народмон — любой город</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     body {font-family: sans-serif; padding:20px; background:#000; color:#fff; margin:0;}
@@ -12,46 +12,22 @@
     button {background:#0088cc; border:none; color:white;}
     .card {background:#111; padding:15px; border-radius:12px; margin:10px 0;}
     .small {font-size:0.9em; color:#aaa;}
+    .loader {text-align:center; padding:20px;}
   </style>
 </head>
 <body>
   <h1>Погода по датчикам Народмон</h1>
-  
-  <input type="text" id="city" placeholder="Город из списка ↓" list="cities">
-  <datalist id="cities">
-    <option>Москва</option><option>Санкт-Петербург</option><option>Новосибирск</option><option>Екатеринбург</option>
-    <option>Казань</option><option>Нижний Новгород</option><option>Челябинск</option><option>Красноярск</option>
-    <option>Самара</option><option>Уфа</option><option>Ростов-на-Дону</option><option>Омск</option>
-    <option>Краснодар</option><option>Воронеж</option><option>Пермь</option><option>Волгоград</option>
-  </datalist>
-  
+
+  <input type="text" id="city" placeholder="Введите любой город или населённый пункт" autofocus>
   <button onclick="search()">Показать датчики</button>
   <button onclick="getLocation()">Найти рядом со мной</button>
-  
-  <div id="out">Выберите город и нажмите кнопку</div>
+
+  <div id="out">Введите название города и нажмите «Показать датчики»</div>
 
 <script>
 const API_KEY = "WV7RVH19UkqsZ";
 
-const cities = {
-  "Москва": [55.7558, 37.6173],
-  "Санкт-Петербург": [59.939, 30.314],
-  "Новосибирск": [55.008, 82.935],
-  "Екатеринбург": [56.838, 60.597],
-  "Казань": [55.796, 49.106],
-  "Нижний Новгород": [56.296, 43.936],
-  "Челябинск": [55.164, 61.436],
-  "Красноярск": [56.015, 92.893],
-  "Самара": [53.241, 50.221],
-  "Уфа": [54.735, 55.958],
-  "Ростов-на-Дону": [47.222, 39.720],
-  "Омск": [54.989, 73.368],
-  "Краснодар": [45.039, 38.987],
-  "Воронеж": [51.672, 39.184],
-  "Пермь": [58.010, 56.229],
-  "Волгоград": [48.708, 44.513]
-};
-
+// Генерация UUID (требует Народмон)
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0;
@@ -60,12 +36,50 @@ function generateUUID() {
   });
 }
 
+// Геокодирование через Yandex (отлично понимает русский язык)
+async function geocode(cityName) {
+  const query = encodeURIComponent(cityName);
+  const url = `https://geocode-maps.yandex.ru/1.x/?apikey=ваш_ключ_если_есть&geocode=${query}&format=json&results=1`;
+  
+  // Если у тебя нет своего ключа — можно использовать без ключа (лимит ~25к запросов/сутки)
+  const urlNoKey = `https://geocode-maps.yandex.ru/1.x/?geocode=${query}&format=json&results=1`;
+  
+  try {
+    const res = await fetch(urlNoKey);
+    const data = await res.json();
+    const pos = data.response.GeoObjectCollection.featureMember[0]?.GeoObject.Point.pos;
+    if (!pos) throw new Error("Город не найден");
+    const [lng, lat] = pos.split(' ');
+    return { lat: parseFloat(lat), lng: parseFloat(lng) };
+  } catch (e) {
+    throw new Error("Не удалось найти город «" + cityName + "»");
+  }
+}
+
+// Альтернатива: Nominatim (OpenStreetMap) — полностью бесплатно, но чуть хуже с русскими названиями
+/*
+async function geocode(cityName) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName)}&limit=1&countrycodes=ru,by,ua,kz`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'NarodmonWeatherBot/1.0' } });
+  const data = await res.json();
+  if (data.length === 0) throw new Error("Город не найден");
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+}
+*/
+
 async function search() {
-  const city = document.getElementById('city').value.trim();
-  if (!cities[city]) return alert('Выберите город из списка');
-  localStorage.setItem('lastCity', city);
-  const [lat, lng] = cities[city];
-  loadSensors(lat, lng, city);
+  const cityInput = document.getElementById('city').value.trim();
+  if (!cityInput) return alert('Введите название города');
+
+  document.getElementById('out').innerHTML = '<div class="loader">Ищем город «' + cityInput + '»…</div>';
+
+  try {
+    const coords = await geocode(cityInput);
+    localStorage.setItem('lastCity', cityInput);
+    loadSensors(coords.lat, coords.lng, cityInput);
+  } catch (e) {
+    document.getElementById('out').innerHTML = '<b>Ошибка:</b> ' + e.message;
+  }
 }
 
 function getLocation() {
@@ -78,7 +92,7 @@ Telegram.WebApp.onEvent('locationReceived', loc => {
 });
 
 async function loadSensors(lat, lng, title) {
-  document.getElementById('out').innerHTML = 'Загружаю…';
+  document.getElementById('out').innerHTML = '<div class="loader">Загружаем датчики Народмон…</div>';
 
   const uuid = generateUUID();
   const url = `https://narodmon.ru/api/sensorsNearby?lat=${lat}&lng=${lng}&distance=100&types=1,2,3&api_key=${API_KEY}&uuid=${uuid}`;
@@ -86,41 +100,41 @@ async function loadSensors(lat, lng, title) {
   try {
     const res = await fetch(url);
     const data = await res.json();
+    if (data.error) throw new Error(data.error || 'Ошибка API');
 
-    if (data.error) throw new Error(data.error);
-
-    // Реальный API возвращает devices с sensors
     const devices = data.devices || [];
     let html = `<b>${title}</b><br>Найдено ${devices.length} датчиков в радиусе 100 км<br><br>`;
 
     if (devices.length === 0) {
-      html += 'В этом районе пока нет активных датчиков';
+      html += 'В этом районе пока нет активных датчиков :(';
     } else {
-      devices.slice(0, 30).forEach(d => {
-        const tempSensor = d.sensors?.find(s => s.type === 1) || d.sensors?.find(s => s.type_name === 'Температура');
+      devices.slice(0, 40).forEach(d => {
+        const tempSensor = d.sensors?.find(s => s.type === 1) || 
+                          d.sensors?.find(s => s.type_name === 'Температура');
         const temp = tempSensor ? tempSensor.value.toFixed(1) + '°C' : '—';
         const name = d.name || d.title || 'Без названия';
         const dist = d.distance ? d.distance.toFixed(1) + ' км' : '';
         const time = new Date((d.time || d.updated || 0) * 1000).toLocaleString('ru');
 
-        html += `<div class="card"><b>${name}</b> ${dist}<br>`;
-        html += `Температура: ${temp}<br>`;
-        html += `<span class="small">Обновлено: ${time}</span></div>`;
+        html += `<div class="card">
+          <b>${name}</b> ${dist}<br>
+          Температура: ${temp}<br>
+          <span class="small">Обновлено: ${time}</span>
+        </div>`;
       });
     }
-
     document.getElementById('out').innerHTML = html;
   } catch (e) {
     document.getElementById('out').innerHTML = `<b>Ошибка:</b> ${e.message}<br>Проверьте интернет или попробуйте позже`;
   }
 }
 
-// Автозагрузка последнего города
+// Восстановление последнего поиска
 const last = localStorage.getItem('lastCity');
-if (last && cities[last]) {
+if (last) {
   document.getElementById('city').value = last;
-  const [lat, lng] = cities[last];
-  loadSensors(lat, lng, last);
+  // Можно сразу загрузить, если хочешь
+  // search();
 }
 
 Telegram.WebApp.ready();
