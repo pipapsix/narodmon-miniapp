@@ -52,6 +52,14 @@ const cities = {
   "Волгоград": [48.708, 44.513]
 };
 
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 async function search() {
   const city = document.getElementById('city').value.trim();
   if (!cities[city]) return alert('Выберите город из списка');
@@ -72,39 +80,49 @@ Telegram.WebApp.onEvent('locationReceived', loc => {
 function loadSensors(lat, lng, title) {
   document.getElementById('out').innerHTML = 'Загружаю…';
 
-  // Самый надёжный UUID, который принимает Народмон в 2025
-  const raw = Telegram.WebApp.initData || 'guest';
-  const uuid = btoa(raw).substring(0, 32);
+  const uuid = generateUUID(); // Настоящий UUID v4 для Народмона 2025
 
-  const url = `https://narodmon.ru/api/sensorsNearby?lat=${lat}&lng=${lng}&distance=50&types=1,2,3&api_key=${API_KEY}&uuid=${uuid}`;
+  // Пробуем сначала 100 км, если 0 — 200 км
+  let distance = 100;
+  loadWithDistance(lat, lng, title, distance, uuid);
+}
 
-  fetch('https://corsproxy.io/?' + encodeURIComponent(url))
-    .then(r => r.json())
-    .then(data => {
-      if (data.error) throw new Error(data.error);
+async function loadWithDistance(lat, lng, title, distance, uuid) {
+  const url = `https://narodmon.ru/api/sensorsNearby?lat=${lat}&lng=${lng}&distance=${distance}&types=1,2,3&api_key=${API_KEY}&uuid=${uuid}`;
 
-      const sensors = data.sensors || [];
-      let html = `<b>${title}</b><br>Найдено ${sensors.length} датчиков в радиусе 50 км<br><br>`;
+  try {
+    const res = await fetch('https://corsproxy.io/?' + encodeURIComponent(url));
+    const data = await res.json();
 
-      if (sensors.length === 0) {
-        html += 'В этом районе пока нет датчиков';
-      } else {
-        sensors.slice(0, 30).forEach(s => {
-          const temp = s.value != null ? s.value.toFixed(1) : '—';
-          const name = s.name || 'Без названия';
-          const dist = s.distance ? s.distance.toFixed(1) + ' км' : '';
-          const time = new Date(s.time * 1000).toLocaleString('ru');
+    if (data.error) throw new Error(data.error);
 
-          html += `<div class="card"><b>${name}</b> ${dist}<br>`;
-          html += `Температура: ${temp}°C<br>`;
-          html += `<span class="small">Обновлено: ${time}</span></div>`;
-        });
+    const sensors = data.sensors || [];
+    let html = `<b>${title}</b><br>Найдено ${sensors.length} датчиков в радиусе ${distance} км<br><br>`;
+
+    if (sensors.length === 0) {
+      if (distance < 200) {
+        // Fallback на больший радиус
+        loadWithDistance(lat, lng, title, 200, uuid);
+        return;
       }
-      document.getElementById('out').innerHTML = html;
-    })
-    .catch(e => {
-      document.getElementById('out').innerHTML = `<b>Ошибка:</b> ${e.message}<br>Попробуйте позже`;
-    });
+      html += 'В этом районе пока нет активных датчиков';
+    } else {
+      sensors.slice(0, 30).forEach(s => {
+        const temp = s.value != null ? s.value.toFixed(1) : '—';
+        const name = s.name || 'Без названия';
+        const dist = s.distance ? s.distance.toFixed(1) + ' км' : '';
+        const time = new Date(s.time * 1000).toLocaleString('ru');
+
+        html += `<div class="card"><b>${name}</b> ${dist}<br>`;
+        html += `Температура: ${temp}°C<br>`;
+        html += `<span class="small">Обновлено: ${time}</span></div>`;
+      });
+    }
+
+    document.getElementById('out').innerHTML = html;
+  } catch (e) {
+    document.getElementById('out').innerHTML = `<b>Ошибка:</b> ${e.message}<br>Попробуйте позже`;
+  }
 }
 
 // Автозагрузка последнего города
